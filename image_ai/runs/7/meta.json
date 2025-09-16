@@ -1,0 +1,17 @@
+{
+  "mode": "recon",
+  "size": [
+    1080,
+    1080
+  ],
+  "prompt": "a pair of black leather ankle boots, dynamic hanging by their laces, beige studio poster background with diagonal tan stripes and soft circular shapes, glossy floor with subtle mirror reflection, cinematic soft rim light, clean commercial look, no people, no text, no logos",
+  "seed": 11,
+  "strength": 0.55,
+  "guidance": 5.5,
+  "ip_adapter_used": false,
+  "ip_adapter_error": "TypeError: IPAdapterMixin.load_ip_adapter() missing 2 required positional arguments: 'subfolder' and 'weight_name'",
+  "style_ref_used": true,
+  "paths": {
+    "final": "ads_recon/runs/fast_poster/final.png"
+  }
+}

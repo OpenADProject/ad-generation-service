@@ -1,0 +1,16 @@
+{
+  "mode": "recon",
+  "size": [
+    896,
+    1152
+  ],
+  "prompt": "dynamic hanging product, beige studio poster background with diagonal tan stripes and soft circular shapes, glossy floor subtle mirror reflection, cinematic soft rim light, clean commercial, no text, no logos",
+  "seed": 11,
+  "strength": 0.55,
+  "guidance": 5.5,
+  "ip_adapter_used": false,
+  "style_ref_used": true,
+  "paths": {
+    "final": "ads_recon/runs/fast_poster/final.png"
+  }
+}
