@@ -1,8 +1,9 @@
 [server]
 headless = true
-address = "127.0.0.1"
+address = "0.0.0.0"
 port = 8501
 enableCORS = false
+runOnSave = true    # 저장 시 자동 새로고침
 
 [theme]
 backgroundColor = "#f2e2feed"
