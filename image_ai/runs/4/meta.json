@@ -1,0 +1,15 @@
+{
+  "mode": "recon",
+  "size": [
+    1080,
+    1080
+  ],
+  "prompt": "sleek glossy enamel finish, premium showroom lighting",
+  "seed": 123,
+  "strength": 0.6,
+  "guidance": 6.5,
+  "ip_adapter_used": false,
+  "paths": {
+    "final": "ads_recon/runs/recon_loose/final.png"
+  }
+}

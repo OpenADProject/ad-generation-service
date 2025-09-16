@@ -1,0 +1,14 @@
+{
+  "size": [
+    1080,
+    1080
+  ],
+  "prompt": "clean studio background, soft light, minimal, product focused",
+  "seed": 42,
+  "strength": 0.55,
+  "guidance": 5.5,
+  "ip_adapter_used": false,
+  "paths": {
+    "final": "ads_recon/runs/shoes_auto/final.png"
+  }
+}
