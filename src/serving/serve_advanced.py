@@ -1,6 +1,6 @@
 # ------------------------------------------
 # 작성일 : 2025.09.15
-# 버전   : 1차 심화 
+# 버전   : 2차 Hugging Face 최적화 (.env 적용, GPU/CPU 자동)
 # 특징   : 1. 비동기 처리 (async/await)
 #          2. base64 이미지 처리 + 업로드 가능
 #          3. vLLM 직접 호출 옵션
@@ -10,6 +10,8 @@
 #          7. 동시 요청 추적
 #          8. 결과 JSON 자동 저장
 #          9. 환경변수(.env) 적용
+#          10. Hugging Face 이미지 모델 적용 (GPU/CPU 자동 선택)
+#  수정  : 2차 서빙에서 텍스트(OpenAI) + Hugging Face 이미지 모델 직접 호출 by. 2025.09.16 kmk
 # ------------------------------------------
 
 import asyncio
@@ -20,11 +22,20 @@ import base64
 import json
 from pathlib import Path
 from datetime import datetime
-
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
-import httpx
-from dotenv import load_dotenv
 import os
+from io import BytesIO
+
+from fastapi import FastAPI, HTTPException, Request
+from dotenv import load_dotenv
+import httpx
+import torch
+
+# OpenAI 직접 호출
+from openai import OpenAI
+
+# Hugging Face 이미지 모델
+from diffusers import StableDiffusionPipeline
+from PIL import Image
 
 # ===============================
 # .env 로드
@@ -49,15 +60,23 @@ logger = logging.getLogger("serve")
 # ===============================
 # 설정
 # ===============================
-TEXT_API_URL = os.getenv("TEXT_API_URL", "http://localhost:9000")
-IMAGE_API_URL = os.getenv("IMAGE_API_URL", "http://localhost:9100")
-VLLM_URL = os.getenv("VLLM_URL", "http://localhost:9002")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TEXT_MODEL_CLIENT = OpenAI(api_key=OPENAI_API_KEY)
+VLLM_URL = os.getenv("VLLM_URL", "")
+
+# Hugging Face 이미지 모델 로드
+IMAGE_MODEL_PATH = os.getenv("IMAGE_MODEL_PATH", "/opt/models/hf")
+device = "cuda" if torch.cuda.is_available() else "cpu"
+logger.info(f"Loading Hugging Face model from {IMAGE_MODEL_PATH} on {device}...")
+IMAGE_MODEL = StableDiffusionPipeline.from_pretrained(IMAGE_MODEL_PATH, torch_dtype=torch.float16 if device=="cuda" else torch.float32)
+IMAGE_MODEL.to(device)
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 DATA_DIR.mkdir(exist_ok=True)
-
 IMAGE_SAVE_DIR = Path(os.getenv("IMAGE_SAVE_DIR", "generated_images"))
 IMAGE_SAVE_DIR.mkdir(exist_ok=True)
+
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:9000/generations/")
 
 # 동시 요청 추적
 active_requests = 0
@@ -66,7 +85,7 @@ lock = asyncio.Lock()
 # ===============================
 # FastAPI 앱
 # ===============================
-app = FastAPI(title="Unified Serving API")
+app = FastAPI(title="Unified Serving API (Direct Model + DB Record)")
 
 # ===============================
 # 헬퍼: JSON 저장
@@ -77,31 +96,6 @@ def save_json(result: dict, prefix="result"):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     logger.info(f"Saved JSON: {filename}")
-
-# ===============================
-# 헬퍼: API 호출 (latency 측정 + 동시 요청 추적)
-# ===============================
-async def post_with_metrics(client, url, payload, endpoint_name: str):
-    global active_requests
-    async with lock:
-        active_requests += 1
-        logger.info(f"[{endpoint_name}] started, active={active_requests}")
-
-    start = time.perf_counter()
-    try:
-        resp = await client.post(url, json=payload, timeout=60.0)
-        resp.raise_for_status()
-        duration = time.perf_counter() - start
-        logger.info(f"[{endpoint_name}] success {duration:.2f}s (active={active_requests})")
-        return resp.json(), duration
-    except Exception as e:
-        duration = time.perf_counter() - start
-        logger.error(f"[{endpoint_name}] failed {duration:.2f}s: {e}")
-        raise HTTPException(status_code=500, detail=f"{endpoint_name} error: {str(e)}")
-    finally:
-        async with lock:
-            active_requests -= 1
-            logger.info(f"[{endpoint_name}] finished, active={active_requests}")
 
 # ===============================
 # 헬퍼: 이미지 처리 (base64 -> 파일)
@@ -120,76 +114,102 @@ def save_base64_images(data: dict):
     return images
 
 # ===============================
-# 텍스트 생성 엔드포인트
+# 헬퍼: 백엔드 기록
+# ===============================
+async def record_to_backend(payload: dict):
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(BACKEND_API_URL, json=payload, timeout=10)
+            resp.raise_for_status()
+            logger.info(f"Recorded to backend: {resp.status_code}")
+        except Exception as e:
+            logger.error(f"Failed to record to backend: {e}")
+
+# ===============================
+# 텍스트 생성 함수 (OpenAI / vLLM 선택)
+# ===============================
+def generate_text_content(prompt: str, use_vllm: bool = False):
+    if use_vllm and VLLM_URL:
+        import requests
+        payload = {"model": "llm-model", "prompt": prompt}
+        r = requests.post(f"{VLLM_URL}/v1/chat/completions", json=payload, timeout=30)
+        r.raise_for_status()
+        data = r.json()["choices"][0]["message"]["content"]
+        return data.strip()
+    else:
+        response = TEXT_MODEL_CLIENT.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.9,
+        )
+        return response.choices[0].message.content.strip()
+
+# ===============================
+# 이미지 생성 함수 (Hugging Face, GPU/CPU 자동)
+# ===============================
+def generate_image_local(prompt: str):
+    """
+    Hugging Face 모델로 이미지 생성 후 base64 반환
+    """
+    generated = IMAGE_MODEL(prompt)
+    image = generated.images[0]
+
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return {"images": [img_str]}
+
+# ===============================
+# 엔드포인트 공통 구조
+# ===============================
+async def process_request(request: Request, text: bool = False, image: bool = False, ad: bool = False):
+    global active_requests
+    async with lock:
+        active_requests += 1
+    start = time.perf_counter()
+    try:
+        payload = await request.json()
+        prompt = payload.get("prompt", "")
+
+        result = {}
+        if text:
+            text_data = generate_text_content(prompt)
+            result["text"] = text_data
+
+        if image:
+            image_data = generate_image_local(prompt if not text else text_data)
+            images = save_base64_images(image_data)
+            result["images"] = images
+
+        total_latency = time.perf_counter() - start
+        result["latency_ms"] = total_latency
+
+        await record_to_backend(result)
+        save_json(result, prefix="ad" if ad else "request")
+        return result
+    finally:
+        async with lock:
+            active_requests -= 1
+
+# ===============================
+# 엔드포인트
 # ===============================
 @app.post("/generate/text")
 async def generate_text(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        if TEXT_API_URL:
-            data, latency = await post_with_metrics(client, f"{TEXT_API_URL}/generate", payload, "TEXT_API")
-        else:
-            # vLLM 직접 호출 (OpenAI-compatible)
-            system = "You are an assistant that writes marketing copy. Return JSON with headline, caption, hashtags."
-            user = f"Prompt: {payload.get('prompt', '')}"
-            vllm_payload = {"model": "llm-model", "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
-            resp = await client.post(f"{VLLM_URL}/v1/chat/completions", json=vllm_payload, timeout=60.0)
-            resp.raise_for_status()
-            content = resp.json()["choices"][0]["message"]["content"]
-            try:
-                data = json.loads(content)
-            except Exception:
-                data = {"headline":"", "caption":content, "hashtags":[]}
-            latency = 0.0  # 단순화
+    return await process_request(request, text=True)
 
-    save_json({"text": data, "latency_ms": latency}, prefix="text")
-    return {"result": data, "latency": latency}
-
-# ===============================
-# 이미지 생성 엔드포인트
-# ===============================
 @app.post("/generate/image")
 async def generate_image(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        data, latency = await post_with_metrics(client, f"{IMAGE_API_URL}/generate", payload, "IMAGE_API")
-    images = save_base64_images(data)
-    save_json({"images": images, "latency_ms": latency}, prefix="image")
-    return {"result": images, "latency": latency}
+    return await process_request(request, image=True)
 
-# ===============================
-# 통합 광고 생성 엔드포인트 (텍스트 + 이미지)
-# ===============================
 @app.post("/generate/ad")
 async def generate_ad(request: Request):
-    payload = await request.json()
-    async with httpx.AsyncClient() as client:
-        # 1. 텍스트 생성
-        text_data, text_latency = await post_with_metrics(client, f"{TEXT_API_URL}/generate", payload, "TEXT_API")
+    return await process_request(request, text=True, image=True, ad=True)
 
-        # 2. 이미지 생성 (텍스트 결과를 프롬프트로 넘김)
-        img_payload = {"prompt": text_data.get("output", text_data.get("caption", "default prompt"))}
-        image_data, img_latency = await post_with_metrics(client, f"{IMAGE_API_URL}/generate", img_payload, "IMAGE_API")
-
-    images = save_base64_images(image_data)
-    total_latency = text_latency + img_latency
-
-    result = {
-        "text": text_data,
-        "images": images,
-        "latency_ms": {"text": text_latency, "image": img_latency, "total": total_latency}
-    }
-    save_json(result, prefix="ad")
-    return result
-
-# ===============================
-# 헬스체크
-# ===============================
 @app.get("/health")
 async def health():
     return {"status": "ok", "active_requests": active_requests}
 
 # ===============================
 # 실행 예시
-# ===============================
-# uvicorn serve:app --host 0.0.0.0 --port 9100 --reload
+# uvicorn serve_advanced_direct:app --host 0.0.0.0 --port 9001 --reload
