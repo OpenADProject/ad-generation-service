@@ -3,10 +3,12 @@ from io import BytesIO
 from typing import Optional, Tuple
 import streamlit as st
 from PIL import Image
+import requests
+import base64
+from utils.generations_api import save_generation, list_generations, delete_generation
 
 PREVIEW_IMG_PATH = "assets/instagram_image.png"   # 상단 배너/미리보기
 FALLBACK_IMG_PATH = "assets/image.png"            # 업로드 없을 때 예시 출력용
-
 
 def _bytes_from_image(img: Image.Image) -> bytes:
     """PIL.Image → PNG 바이트"""
@@ -14,7 +16,6 @@ def _bytes_from_image(img: Image.Image) -> bytes:
     img.save(buf, format="PNG")
     buf.seek(0)
     return buf.getvalue()
-
 
 # 인트로/헤더
 def render_intro() -> None:
@@ -115,6 +116,13 @@ def render_result(generated_img: Image.Image, download_name: str) -> None:
         use_container_width=True,
     )
 
+def _data_url_from_image(img: Image.Image) -> str:
+    """PIL.Image -> data URL (PNG, base64)"""
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
 def main() -> None:
     """
     인스타그램 이미지 생성 페이지 렌더링 순서
@@ -145,9 +153,25 @@ def main() -> None:
 
     placeholder.empty()
     with placeholder.container():
-        # TODO: 실제 생성 API 연동 시 src_img, title, bg_choice, prompt_text를 전달
         render_result(src_img, download_name=title)
 
+        # 백엔드 스키마(models.GenerationCreate)에 맞춘 input_text 
+        input_text = (
+            f"[채널: instagram]\n"
+            f"상품/상호명: {title}\n"
+            f"배경: {bg_choice}\n"
+            f"요청사항: {prompt_text or '(없음)'}"
+        )
+
+        # 생성 이력 저장 호출
+        try:
+            data_url = _data_url_from_image(src_img)
+            saved = save_generation(input_text=input_text, output_image_path=data_url)
+            st.info(f"생성 이력이 저장되었습니다 · ID: {saved.get('id','?')}")
+        except requests.HTTPError as e:
+            st.error(f"이력 저장 실패(HTTP): {e.response.status_code} {e.response.text}")
+        except Exception as e:
+            st.error(f"이력 저장 실패: {e}")
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,8 @@
 import time
 from typing import Optional, Tuple
-
 import streamlit as st
 from PIL import Image
+from utils.generations_api import save_generation, list_generations, delete_generation
 
 BANNER_IMG_PATH   = "assets/instagram_text.png"
 PREVIEW_TEXT_PATH = "assets/text.png"   # 하단 미리보기 이미지(선택)
@@ -151,6 +151,24 @@ def main() -> None:
         render_result(generated_text)
         st.session_state.insta_text_result = generated_text
 
+        input_text = (
+            f"[채널: instagram]\n"
+            f"상품/상호명: {title}\n"
+            f"톤: {tone}\n"
+            f"요청사항: {prompt_text or '(없음)'}"
+        )
+
+        try:
+            saved = save_generation(
+                input_text=input_text,
+                # input_image_path=None,  # 이미지 업로드/저장 로직 붙이면 채우기
+                output_text=generated_text,
+                # output_image_path=None,
+            )
+            st.info(f"생성 이력이 저장되었어요 · ID: {saved.get('id','?')}")
+        except Exception as e:
+            # HTTPError 포함 전부 캐치해서 사용자에게만 친절히 알림
+            st.warning(f"이력 저장은 건너뛰었습니다: {e}")
 
 if __name__ == "__main__":
     main()
