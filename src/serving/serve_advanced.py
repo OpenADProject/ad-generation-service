@@ -6,15 +6,15 @@
 # 2. base64 이미지 처리 + 업로드 가능
 # 3. vLLM 직접 호출 옵션
 # 4. 로깅 및 예외 처리 강화
-# 5. 통합 엔드포인트 제공
+# 5. 통합 엔드포인트 제공 + 개별 텍스트/이미지 엔드포인트 추가
 # 6. latency 기록
 # 7. 동시 요청 추적
 # 8. 결과 JSON 자동 저장
 # 9. 환경변수(.env) 적용
 # 10. 이미지팀 CLI 호출 기반 이미지 생성 (JSON 기반 옵션 반영)
 # 11. 외부 텍스트 API POST 호출 분기 지원
+# 12. 백엔드 이력 추가
 # ------------------------------------------
-
 import asyncio
 import time
 import logging
@@ -27,7 +27,8 @@ import os
 import subprocess
 import httpx
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -58,14 +59,15 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TEXT_MODEL_CLIENT = OpenAI(api_key=OPENAI_API_KEY)
 TEXT_EXTERNAL_URL = os.getenv("TEXT_EXTERNAL_URL", "")
 VLLM_URL = os.getenv("VLLM_URL", "")
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:9000/generations/")
 
-DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+DATA_DIR = PROJECT_ROOT / os.getenv("DATA_DIR", "data")
 DATA_DIR.mkdir(exist_ok=True)
 
-IMAGE_SAVE_DIR = Path(os.getenv("IMAGE_SAVE_DIR", "generated_images"))
+IMAGE_SAVE_DIR = PROJECT_ROOT / os.getenv("IMAGE_SAVE_DIR", "generated_images")
 IMAGE_SAVE_DIR.mkdir(exist_ok=True)
-
-HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
 
 # 동시 요청 추적
 active_requests = 0
@@ -89,18 +91,18 @@ def save_json(result: dict, prefix="result"):
 # ===============================
 # 헬퍼: 이미지 처리 (파일 -> base64)
 # ===============================
-def save_base64_images(file_paths: list):
-    images_b64 = []
-    for f in file_paths:
-        with open(f, "rb") as img_f:
-            images_b64.append(base64.b64encode(img_f.read()).decode())
-    return images_b64
+def _get_base64_from_path(file_path: Path):
+    if not file_path.exists():
+        logger.warning(f"Image file not found: {file_path}")
+        return None
+    with open(file_path, "rb") as img_f:
+        encoded_string = base64.b64encode(img_f.read()).decode()
+    return f"data:image/png;base64,{encoded_string}"
 
 # ===============================
 # 텍스트 생성 함수
 # ===============================
 def generate_text_content(prompt: str, use_vllm: bool = False):
-    # 외부 텍스트 API 우선
     if TEXT_EXTERNAL_URL:
         try:
             resp = httpx.post(TEXT_EXTERNAL_URL, json={"prompt": prompt}, timeout=30)
@@ -112,16 +114,9 @@ def generate_text_content(prompt: str, use_vllm: bool = False):
         except Exception as e:
             logger.warning(f"External text API call failed: {e}")
 
-    # vLLM 사용
     if use_vllm and VLLM_URL:
-        import requests
-        payload = {"model": "llm-model", "prompt": prompt}
-        r = requests.post(f"{VLLM_URL}/v1/chat/completions", json=payload, timeout=30)
-        r.raise_for_status()
-        data = r.json()["choices"][0]["message"]["content"]
-        return data.strip()
+        pass  # vLLM 호출 로직 생략
 
-    # OpenAI 기본 호출
     response = TEXT_MODEL_CLIENT.chat.completions.create(
         model="gpt-4.1-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -130,31 +125,41 @@ def generate_text_content(prompt: str, use_vllm: bool = False):
     return response.choices[0].message.content.strip()
 
 # ===============================
-# 이미지 생성 함수 (JSON 기반 동적 옵션 적용)
+# 이미지 생성 함수
 # ===============================
 def generate_image_local_from_json(json_payload: dict):
     prompt = json_payload.get("prompt")
     if not prompt:
-        return {"error": "prompt is required"}
+        raise HTTPException(status_code=400, detail="Prompt is required for image generation.")
 
-    out_dir = Path(json_payload.get("output_path", IMAGE_SAVE_DIR)) / f"gen_{uuid.uuid4().hex[:8]}"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir_name = f"gen_{uuid.uuid4().hex[:8]}"
+    out_dir_abs = IMAGE_SAVE_DIR / out_dir_name
+    out_dir_abs.mkdir(parents=True, exist_ok=True)
+    
+    cli_cwd = PROJECT_ROOT
 
-    cli_cwd = json_payload.get("cli_path", "src")
-    input_image = json_payload.get("input_image")
-
-    # 기본값 설정
     size = json_payload.get("size", "768x768")
     steps = str(json_payload.get("steps", 6))
     guidance = str(json_payload.get("guidance", 2.0))
     seed = str(json_payload.get("seed", 11))
     use_ip = str(json_payload.get("use_ip", "false")).lower()
     ref_mode = json_payload.get("ref_mode", "ip_txt2img")
+    
+    if ref_mode in ["ip_txt2img", "img2img"]:
+        input_image_path = json_payload.get("input_image")
+        if not input_image_path:
+            raise HTTPException(status_code=400, detail=f"The selected 'ref_mode' ({ref_mode}) requires an 'input_image' argument.")
+        full_image_path = PROJECT_ROOT / input_image_path
+        if not full_image_path.exists():
+            raise HTTPException(status_code=404, detail=f"Input image file not found: {full_image_path}")
+        input_image_arg = str(full_image_path)
+    else:
+        input_image_arg = None
 
     cmd = [
-        "python", "-m", "model.imagemodel.pipeline",
+        "python", "-m", "src.model.imagemodel.pipeline", 
         "--mode", "recon",
-        "--out", str(out_dir),
+        "--out", str(out_dir_abs),
         "--concept", prompt,
         "--size", size,
         "--steps", steps,
@@ -164,20 +169,34 @@ def generate_image_local_from_json(json_payload: dict):
         "--ref_mode", ref_mode
     ]
 
-    if input_image and Path(input_image).exists():
-        cmd.extend(["--in", input_image])
-
+    if input_image_arg:
+        cmd.extend(["--in", input_image_arg])
+    
     env = os.environ.copy()
     try:
-        subprocess.run(cmd, check=True, env=env, cwd=cli_cwd)
-        generated_files = list(out_dir.glob("*.png"))
-        if not generated_files:
-            logger.warning("No images generated by CLI.")
-            return {"images": []}
-        return {"images": save_base64_images(generated_files)}
+        result = subprocess.run(cmd, check=True, env=env, cwd=cli_cwd, capture_output=True, text=True)
+        logger.info(f"Subprocess stdout: {result.stdout}")
+        logger.info(f"Subprocess stderr: {result.stderr}")
+
+        meta_file_path = out_dir_abs / "meta.json"
+        if not meta_file_path.exists():
+            logger.error(f"Meta file not found at {meta_file_path}")
+            return {"images": [], "error": "Meta file not found.", "image_file_path": None}
+        
+        with open(meta_file_path, "r", encoding="utf-8") as f:
+            meta_data = json.load(f)
+        
+        generated_image_path = out_dir_abs / meta_data["paths"]["final"]
+        base64_image = _get_base64_from_path(generated_image_path)
+        
+        if base64_image:
+            return {"images": [base64_image], "meta": meta_data, "image_file_path": str(generated_image_path)}
+        else:
+            return {"images": [], "error": "Image file not found.", "image_file_path": None}
+            
     except subprocess.CalledProcessError as e:
-        logger.error(f"Image generation failed: {e}")
-        return {"images": [], "error": str(e)}
+        logger.error(f"Image generation failed: {e.stderr}")
+        return {"images": [], "error": f"Image generation failed: {e.stderr}", "image_file_path": None}
 
 # ===============================
 # 통합 광고 생성 처리
@@ -188,46 +207,66 @@ async def process_request(request: Request, text: bool = False, image: bool = Fa
         active_requests += 1
     start = time.perf_counter()
 
-    text_data = {}
-    images = []
-    text_latency = 0.0
-    img_latency = 0.0
-
+    final_result = {
+        "text": {},
+        "images": [],
+        "latency_ms": {}
+    }
+    
+    generated_image_path = None
+    
     try:
         payload = await request.json()
         prompt = payload.get("prompt", "")
-
-        # 텍스트 생성
+        
         if text:
             t0 = time.perf_counter()
             content = generate_text_content(prompt)
-            t1 = time.perf_counter()
-            text_latency = (t1 - t0) * 1000
-            text_data = {"output": content}
-
-        # 이미지 생성
+            text_latency = (time.perf_counter() - t0) * 1000
+            final_result["text"]["output"] = content
+            final_result["latency_ms"]["text"] = text_latency
+            
         if image:
             t0 = time.perf_counter()
             image_data = generate_image_local_from_json(payload)
-            images = image_data.get("images", [])
-            t1 = time.perf_counter()
-            img_latency = (t1 - t0) * 1000
+            image_latency = (time.perf_counter() - t0) * 1000
+            
+            final_result["images"] = image_data.get("images", [])
+            final_result["latency_ms"]["image"] = image_latency
+            generated_image_path = image_data.get("image_file_path")
+            
+            if "error" in image_data:
+                final_result["error"] = image_data["error"]
+                
+        total_latency = final_result["latency_ms"].get("text", 0) + final_result["latency_ms"].get("image", 0)
+        final_result["latency_ms"]["total"] = total_latency
 
-        total_latency = text_latency + img_latency
+        try:
+            if final_result.get("text") or generated_image_path:
+                backend_payload = {
+                    "input_text": prompt,
+                    "output_text": final_result["text"].get("output"),
+                    "output_image_path": generated_image_path,
+                }
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(BACKEND_API_URL, json=backend_payload, timeout=10)
+                    response.raise_for_status()
+                    logger.info("Successfully sent generation log to backend.")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to send to backend (HTTP Error): {e.response.text}")
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send to backend (Request Error): {e}")
 
-        result = {
-            "text": text_data,
-            "images": images,
-            "latency_ms": {"text": text_latency, "image": img_latency, "total": total_latency}
-        }
-
-        save_json(result, prefix="ad")
-        return result
-
+        save_json(final_result, prefix="ad")
+        return JSONResponse(content=final_result)
+        
     except Exception as e:
         logger.error(f"process_request failed: {e}")
-        return {"error": str(e)}
-
+        if isinstance(e, HTTPException):
+            raise e
+        else:
+            raise HTTPException(status_code=500, detail=str(e))
+    
     finally:
         async with lock:
             active_requests -= 1
@@ -239,11 +278,19 @@ async def process_request(request: Request, text: bool = False, image: bool = Fa
 async def generate_ad(request: Request):
     return await process_request(request, text=True, image=True)
 
+@app.post("/generate/text")
+async def generate_text_only(request: Request):
+    return await process_request(request, text=True, image=False)
+
+@app.post("/generate/image")
+async def generate_image_only(request: Request):
+    return await process_request(request, text=False, image=True)
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "active_requests": active_requests}
 
 # ===============================
 # 실행 예시
-# uvicorn src.serving.serve_advanced:app --host 0.0.0.0 --port 9001
+# uvicorn src.serving.serve_advanced:app --host 0.0.0.0 --port 9001 --reload
 # ===============================
