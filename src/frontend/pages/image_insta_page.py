@@ -49,10 +49,15 @@ def render_intro() -> None:
 
 
 def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[object]]:
+
+def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[object]]:
     """
     Returns:
         submitted, uploaded_img, title, bg_choice, prompt_text, model_upload_file
+        submitted, uploaded_img, title, bg_choice, prompt_text, model_upload_file
     """
+    _init_model_store()  # 보관함 세션키 보장
+
     _init_model_store()  # 보관함 세션키 보장
 
     with st.form("insta_image_form"):
@@ -60,6 +65,11 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
         st.subheader("1. 이미지 등록하기")
         st.write("상품/가게 이미지나 참고할 이미지가 있다면 등록해주세요. (이미지가 없다면 생략 가능합니다.)")
         st.write("⬇️ 아래의 :orange-background[Browse files] 버튼을 누르면 이미지 등록이 가능합니다. ⬇️")
+        uploaded_file = st.file_uploader(
+            "이미지 업로드",
+            type=["png", "jpg", "jpeg"],
+            key="main_image_uploader",     # ← 고유 key 부여
+        )
         uploaded_file = st.file_uploader(
             "이미지 업로드",
             type=["png", "jpg", "jpeg"],
@@ -150,9 +160,12 @@ def _data_url_from_image(img: Image.Image) -> str:
     return f"data:image/png;base64,{b64}"
 
 
+
 def main() -> None:
     render_intro()
 
+    # model_upload도 함께 받음
+    submitted, uploaded_img, title, bg_choice, prompt_text, model_upload = build_form()
     # model_upload도 함께 받음
     submitted, uploaded_img, title, bg_choice, prompt_text, model_upload = build_form()
 
@@ -201,5 +214,7 @@ def main() -> None:
             st.error(f"이력 저장 실패: {e}")
 
 
+
 if __name__ == "__main__":
     main()
+
