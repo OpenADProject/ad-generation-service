@@ -3,10 +3,6 @@ import os, base64
 from typing import Optional
 
 def caption_or_concept(img_path: str, user_concept: Optional[str]) -> str:
-    """
-    - user_concept가 있으면 그대로 사용
-    - 없으면 OpenAI(옵션)로 캡션→컨셉 요약. 키 없으면 기본 프롬프트로 폴백
-    """
     if user_concept:
         return user_concept
 
