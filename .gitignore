@@ -206,6 +206,17 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# imagemodel
+src/model/imagemodel/inputs/
+src/model/imagemodel/outputs/
+src/model/imagemodel/runs/
+src/model/imagemodel/server_log/
+src/model/imagemodel/request_path.json
+
+# 임시/캐시
+*.pyc
+__pycache__/
+
 # 개인 환경설정 
 .bash_history
 .bash_logout
