@@ -4,7 +4,7 @@ import requests
 # 백엔드 서버 주소
 BACKEND_URL = st.secrets["API_BASE"]
 
-st.header("이미지 생성 이력", divider="violet")
+st.header("이미지 생성 이력", divider="blue")
 
 try:
     # GET 요청으로 모든 이력 조회
