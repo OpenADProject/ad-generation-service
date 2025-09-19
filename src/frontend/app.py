@@ -42,8 +42,9 @@ def build_pages() -> dict:
     p = base / "pages"
 
     return {
-        "Home": [
-            st.Page(str(p / "main_page.py"), title="💡 OpenAD 사용법"),
+        "🏠 Home": [
+            st.Page(str(p / "main_page.py"), title="메인 대시보드"),  
+            st.Page(str(p / "guide_page.py"), title="OpenAD 사용법"),
         ],
         "📷 이미지 생성": [
             st.Page(str(p / "image_main_page.py"), title="이미지 생성 가이드"),
@@ -58,6 +59,7 @@ def build_pages() -> dict:
         "📁 History": [
             st.Page(str(p / "history_image_page.py"), title="이미지 보관함"),
             st.Page(str(p / "history_text_page.py"), title="텍스트 보관함"),
+            st.Page(str(p / "history_model_page.py"), title="모델 보관함")
         ],
     }
 

@@ -6,7 +6,7 @@ enableCORS = false
 runOnSave = true    # 저장 시 자동 새로고침
 
 [theme]
-backgroundColor = "#f2e2feed"
-primaryColor = "#f80677ee"
-secondaryBackgroundColor="#f8facaff"
-textColor = "#0c020ff1"
+backgroundColor = "rgba(248, 247, 252, 0.93)"
+primaryColor = "#069ff8b9"
+secondaryBackgroundColor="rgba(184, 226, 230, 1)"
+textColor = "#13052cf1"
