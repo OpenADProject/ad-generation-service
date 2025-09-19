@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from .database import create_db_and_tables
-from .routers import generations
+from .routers import generations, user_models
 import uvicorn
 
 # uvicorn src.backend.main:app --reload --port 9000 --host 0.0.0.0
@@ -18,6 +18,7 @@ def on_startup():
 # routers 폴더 내 API 메인 앱에 포함
 # app.include_router(auth.router) # 계정 기능 추가 시 사용 예정
 app.include_router(generations.router)
+app.include_router(user_models.router)
 
 # 서버 상태를 확인
 @app.get("/")
