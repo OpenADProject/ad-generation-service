@@ -11,7 +11,7 @@ PREVIEW_IMG_PATH = "assets/instagram_image.png"   # 상단 배너/미리보기
 FALLBACK_IMG_PATH = "assets/image.png"            # 업로드 없을 때 예시 출력용
 
 
-# ── 보관함 세션 유틸 ─────────────────────────────────────────
+# 보관함 세션 유틸 
 def _init_model_store():
     if "my_models" not in st.session_state:
         st.session_state["my_models"] = []          # [(name, PIL.Image)]
@@ -27,7 +27,6 @@ def _add_to_model_store(uploaded_file) -> tuple[str, Image.Image, bool]:
     st.session_state["my_models"].append((name, img))
     st.session_state["uploaded_names"].add(name)
     return name, img, True
-# ────────────────────────────────────────────────────────────
 
 
 def _bytes_from_image(img: Image.Image) -> bytes:
@@ -57,7 +56,7 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
     _init_model_store()  # 보관함 세션키 보장
 
     with st.form("insta_image_form"):
-        # 1) 메인 이미지 업로드
+        # 메인 이미지 업로드
         st.subheader("1. 이미지 등록하기")
         st.write("상품/가게 이미지나 참고할 이미지가 있다면 등록해주세요. (이미지가 없다면 생략 가능합니다.)")
         st.write("⬇️ 아래의 :orange-background[Browse files] 버튼을 누르면 이미지 등록이 가능합니다. ⬇️")
@@ -74,7 +73,7 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
 
         st.divider()
 
-        # 2) 요청 사항
+        # 요청 사항
         st.subheader("2. 요청 사항 입력하기")
         st.write("① 상품 이름 또는 상호명을 입력해주세요.")
         title = st.text_input("예시) 순살후라이드, 촉촉쿠키, 해피미용실, 슈퍼헬스장")
@@ -93,7 +92,7 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
 
         st.divider()
 
-        # 3) 모델 선택/등록
+        # 모델 선택/등록
         st.subheader("3. 모델 선택하기")
         st.write("동물, 사람 모델을 선택하거나 직접 모델 이미지를 등록 가능해요.")
         st.write("⬇️ 아래의 :orange-background[Browse files] 버튼을 누르면 모델 이미지 등록이 가능합니다. ⬇️")
@@ -102,12 +101,10 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
             type=["png", "jpg", "jpeg"],
             key="model_image_uploader",    # ← 고유 key 부여 (중복 에러 해결)
         )
-        # 참고: 여기서 history의 탭 UI를 쓰고 싶다면 render_model_selector()를 넣으면 됩니다.
-        # (이 예시는 업로드만 받고, 선택 UI는 나중에 추가하는 형태)
 
         st.divider()
 
-        # 4) 자유 프롬프트
+        # 자유 프롬프트
         st.subheader("4. 직접 요청하기")
         st.write("주변 물체, 장소, 이미지 분위기 등 이미지 생성에 필요한 요구사항을 작성해봐요. (생략 가능합니다.)")
         prompt_text = st.text_area(
@@ -123,7 +120,7 @@ def build_form() -> Tuple[bool, Optional[Image.Image], str, str, str, Optional[o
         st.write(" ")
         submitted = st.form_submit_button("이미지 생성하기", type="primary")
 
-    # 모델 업로드 파일을 함께 반환(제출 시 보관함 저장 처리)
+    # 모델 업로드 파일을 함께 반환
     return submitted, uploaded_img, title, bg_choice, prompt_text, model_upload
 
 
@@ -159,7 +156,7 @@ def main() -> None:
     # model_upload도 함께 받음
     submitted, uploaded_img, title, bg_choice, prompt_text, model_upload = build_form()
 
-    # 참고 이미지(미리보기)
+    # 참고 이미지
     st.image(FALLBACK_IMG_PATH)
 
     if not submitted:
@@ -169,7 +166,7 @@ def main() -> None:
         st.warning("상품 이름 또는 상호명을 입력해주세요.")
         return
 
-    # (제출 시) 모델 업로드가 있다면 보관함에 저장
+    # 모델 업로드가 있다면 보관함에 저장
     if model_upload is not None:
         _init_model_store()
         name, img_copy, added = _add_to_model_store(model_upload)
