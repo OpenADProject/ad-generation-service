@@ -2,8 +2,8 @@ from sqlmodel import create_engine, SQLModel, Session
 import os
 
 # 프로젝트 루트 폴더에 database.db 파일을 생성
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATABASE_URL = f"sqlite:///{os.path.join(PROJECT_ROOT, 'database.db')}"
+# PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATABASE_URL = "sqlite:////home/db/database.db"
 
 # 데이터베이스 엔진 생성
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -17,3 +17,6 @@ def create_db_and_tables():
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+print(DATABASE_URL)

@@ -58,9 +58,7 @@ def create_user_model(db: Session, user_model: models.UserModelCreate):
     """새로운 사용자 모델(파일 경로)을 DB에 저장합니다."""
     db_model = models.UserModel.from_orm(user_model)
     db.add(db_model)
-    print(f"✅ [CRUD] 2. DB에 모델 추가 완료. 커밋 직전...")
     db.commit()
-    print(f"✅ [CRUD] 3. DB 커밋 성공!")
     db.refresh(db_model)
     return db_model
 
