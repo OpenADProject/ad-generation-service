@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlmodel import Session
 from typing import List
-import shutil
-import uuid
-import os
+import base64
 from .. import crud, models
 from ..database import get_session
 
@@ -17,26 +15,21 @@ UPLOAD_DIRECTORY = "./src/backend/user_models"
 
 # C
 @router.post("/", response_model=models.UserModelResponse)
-def create_user_model(
-    alias: str = Form(...), 
-    file: UploadFile = File(...), 
+async def create_user_model(
+    alias: str = Form(...),
+    file: UploadFile = File(...),
     db: Session = Depends(get_session)
 ):
-    # 파일 이름 랜덤 생성
-    unique_id = uuid.uuid4()
-    file_extension = file.filename.split(".")[-1]
-    unique_filename = f"{unique_id}.{file_extension}"
-    file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+    # 이미지를 바이트로 읽어옴
+    image_bytes = await file.read()
+    # Base64 텍스트로 인코딩
+    base64_encoded = base64.b64encode(image_bytes).decode('utf-8')
+    # Data URL 형식으로 변환
+    data_url = f"data:{file.content_type};base64,{base64_encoded}"
+    # 데이터와 별명 저장
+    db_model = models.UserModelCreate(file_path=data_url, alias=alias)
 
-    # 서버 폴더에 저장
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # DB에 파일 경로 저장
-    db_model = models.UserModelCreate(file_path=file_path, alias=alias)
-    created_model = crud.create_user_model(db=db, user_model=db_model)
-    
-    return created_model
+    return crud.create_user_model(db=db, user_model=db_model)
 
 # R
 @router.get("/", response_model=List[models.UserModelResponse])
@@ -69,3 +62,4 @@ def delete_single_user_model(model_id: int, db: Session = Depends(get_session)):
     if not result:
         raise HTTPException(status_code=404, detail="해당 ID의 모델을 찾을 수 없습니다.")
     return {"ok": True, "message": "모델이 삭제되었습니다."}
+
