@@ -10,3 +10,4 @@ backgroundColor = "rgba(248, 247, 252, 0.93)"
 primaryColor = "#069ff8b9"
 secondaryBackgroundColor="rgba(184, 226, 230, 1)"
 textColor = "#13052cf1"
+baseFontSize = 17

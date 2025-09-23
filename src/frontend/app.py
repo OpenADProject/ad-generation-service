@@ -44,7 +44,7 @@ def build_pages() -> dict:
     return {
         "🏠 Home": [
             st.Page(str(p / "main_page.py"), title="메인 대시보드"),  
-            st.Page(str(p / "guide_page.py"), title="OpenAD 사용법"),
+            # st.Page(str(p / "guide_page.py"), title="OpenAD 사용법"),
         ],
         "📷 이미지 생성": [
             st.Page(str(p / "image_main_page.py"), title="이미지 생성 가이드"),
