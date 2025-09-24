@@ -29,6 +29,16 @@ def setup_page() -> None:
     except Exception:
         pass
 
+def render_sidebar_status():
+    """
+    사이드바에 로그인 상태와 로그아웃 버튼 표시
+    """
+    with st.sidebar:
+        if "token" in st.session_state:
+            if st.button("Logout", type="primary"):
+                st.session_state.pop("token", None)  # 안전하게 삭제
+                st.rerun()  # 상태 갱신 → 로그인 페이지로 이동
+
 # 페이지 정의
 def build_pages() -> dict:
     """
@@ -40,11 +50,20 @@ def build_pages() -> dict:
     """
     base = Path(__file__).parent  # app.py 기준 상대 경로 안전화
     p = base / "pages"
+    is_logged_in = bool(st.session_state.get("token"))
 
+    if not is_logged_in:
+        # 로그인 전: 로그인 페이지만 보여주기
+        return {
+            "🔐 Auth": [
+                st.Page(str(p / "login_page.py"), title="로그인"),
+            ]
+        }
+
+    # 로그인 후: 전체 메뉴 노출
     return {
         "🏠 Home": [
-            st.Page(str(p / "main_page.py"), title="메인 대시보드"),  
-            # st.Page(str(p / "guide_page.py"), title="OpenAD 사용법"),
+            st.Page(str(p / "main_page.py"), title="main"),
         ],
         "📷 이미지 생성": [
             st.Page(str(p / "image_main_page.py"), title="이미지 생성 가이드"),
@@ -59,7 +78,7 @@ def build_pages() -> dict:
         "📁 History": [
             st.Page(str(p / "history_image_page.py"), title="이미지 보관함"),
             st.Page(str(p / "history_text_page.py"), title="텍스트 보관함"),
-            st.Page(str(p / "history_model_page.py"), title="모델 보관함")
+            st.Page(str(p / "history_model_page.py"), title="모델 보관함"),
         ],
     }
 
@@ -75,6 +94,7 @@ def run_navigation(pages: dict) -> None:
 
 def main() -> None:
     setup_page()
+    render_sidebar_status() 
     pages = build_pages()
     run_navigation(pages)
 
