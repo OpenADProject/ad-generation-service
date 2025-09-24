@@ -1,3 +1,4 @@
+# src/backend/models.py
 from sqlmodel import SQLModel, Field, Column, Text
 from typing import Optional
 from datetime import datetime
@@ -27,11 +28,6 @@ class GenerationResponse(GenerationBase):
     id: int
     created_at: datetime
 
-# 응답
-class Message(SQLModel):
-    ok: bool
-    message: str
-
 
 ##################################################
 # 사용자 인물&동물 모델 관리
@@ -60,23 +56,45 @@ class UserModelResponse(UserModelBase):
     id: int
 
 
+##################################################
+# 사용자 계정 관리
+##################################################
+# 공통 필드
+class UserBase(SQLModel):
+    username: str
+
+# DB 정의
+class User(UserBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    hashed_password: str
+
+# 수신
+class UserCreate(UserBase):
+    password: str
+
+# 송신 (비밀번호 제외)
+class UserResponse(UserBase):
+    id: int
+
+# 송신 (비밀번호 변경)
+class UserPasswordUpdate(SQLModel):
+    new_password: str
 
 
-# ##################################################
-# # 회원가입 기능 추가 시
-# # 여러 모델에서 공통으로 사용할 필드
-# class UserBase(SQLModel):
-#     username: str
+##################################################
+# JWT 토큰 관리
+##################################################
+class Token(SQLModel):
+    access_token: str
+    token_type: str
 
-# # DB 테이블을 나타내는 모델 (table=True)
-# class User(UserBase, table=True):
-#     id: Optional[int] = Field(default=None, primary_key=True)
-#     hashed_password: str
+class TokenData(SQLModel):
+    username: Optional[str] = None
 
-# # 회원가입 API 요청 시 받을 데이터 형식
-# class UserCreate(UserBase):
-#     password: str
 
-# # API가 사용자 정보를 응답할 때 보낼 데이터 형식 (비밀번호 제외)
-# class UserResponse(UserBase):
-#     id: int
+##################################################
+# 공통 응답 메시지
+##################################################
+class Message(SQLModel):
+    ok: bool
+    message: str

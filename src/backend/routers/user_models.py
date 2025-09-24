@@ -1,3 +1,4 @@
+# src/backend/routers/user_models.py
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlmodel import Session
 from typing import List
@@ -7,12 +8,15 @@ from ..database import get_session
 
 
 ##################################################
+# 설정
+##################################################
+# 라우터
+router = APIRouter(prefix="/user-models", tags=["User Models"])
+
+
+##################################################
 # 모델 이미지를 관리하는 API
 ##################################################
-# 설정
-router = APIRouter(prefix="/user-models", tags=["User Models"])
-UPLOAD_DIRECTORY = "./src/backend/user_models"
-
 # C
 @router.post("/", response_model=models.UserModelResponse)
 async def create_user_model(
@@ -50,7 +54,7 @@ def update_user_model_alias_by_id(
     if updated_model is None:
         raise HTTPException(status_code=404, detail="해당 ID의 모델을 찾을 수 없습니다.")
     
-    if updated_model == "DEFAULT_MODEL_IS_DELETABLE":
+    if updated_model == "DEFAULT_MODEL_IS_NOT_DELETABLE":
         raise HTTPException(status_code=403, detail="기본 모델은 수정할 수 없습니다.")
 
     return updated_model
