@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 API_BASE = st.secrets["API_BASE"]
 TIMEOUT = 20
 
+# 기본 데이터 관리
 def save_generation(input_text: str,
                     input_image_path: str | None = None,
                     output_text: str | None = None,
@@ -34,6 +35,8 @@ def delete_generation(gen_id: int) -> dict:
     r.raise_for_status()
     return r.json()
 
+
+# 모델 이미지 관리
 def upload_user_model(alias: str, file_name: str, file_bytes: bytes) -> dict:
     """
     POST /user-models/
@@ -68,3 +71,18 @@ def delete_user_model(model_id: int) -> dict:
     r = requests.delete(url, timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
+
+
+# 로그인 관리
+def login_user(username, password):
+    try:
+        response = requests.post(
+            f"{API_BASE}/auth/login",
+            data={"username": username, "password": password}
+        )
+        if response.status_code == 200:
+            return response.json()['access_token']
+        return None
+    except requests.ConnectionError:
+        st.error("백엔드 서버에 연결할 수 없습니다.")
+        return None
