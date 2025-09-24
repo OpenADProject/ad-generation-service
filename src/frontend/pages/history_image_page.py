@@ -1,21 +1,25 @@
 import streamlit as st
 import requests
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any
 
 # 백엔드 서버 주소
 BACKEND_URL = st.secrets["API_BASE"]
 
 def parse_ts(ts: str) -> datetime:
-    """ISO8601 created_at 문자열을 datetime으로 변환"""
+    """ISO8601 created_at 문자열을 UTC로 읽어서 KST로 변환"""
     if not ts:
-        return datetime.min
+        return None
     if ts.endswith("Z"):
         ts = ts.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(ts)
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:  # naive면 UTC로 간주
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        return dt.astimezone(ZoneInfo("Asia/Seoul"))  # 한국 시간 변환
     except Exception:
-        return datetime.min
+        return None
 
 def load_image_generations() -> List[Dict[str, Any]]:
     """이미지 결과물이 있는 생성 이력만 가져와 최신순으로 정렬"""
@@ -32,10 +36,19 @@ def load_image_generations() -> List[Dict[str, Any]]:
 
 def render_image_card(item: Dict[str, Any]) -> None:
     with st.container(border=True):
-        st.caption(f"생성 시간: {item.get('created_at', '-')}")
-        st.write("**입력 내용:**")
-        st.info(item.get("input_text", "(입력 없음)"))
+        created_at_raw = item.get("created_at", "")
+        created_at = parse_ts(created_at_raw)
 
+        # 생성 시간 포맷 변경
+        created_str = created_at.strftime("%Y-%m-%d %H:%M") if created_at else "-"
+
+        st.caption(f"생성 시간: {created_str}")
+        st.write("**입력 내용**")
+        input_txt = item.get("input_text", "(입력 없음)")
+        st.info(input_txt.replace("\n", "  \n"))
+        st.write("")
+        
+        st.write("**생성된 광고 이미지**")
         st.image(item["output_image_path"], caption="생성된 이미지")
 
         if st.button("삭제하기", key=f"delete_img_{item['id']}", type="primary"):
