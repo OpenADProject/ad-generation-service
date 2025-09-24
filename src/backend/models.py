@@ -39,7 +39,7 @@ class Message(SQLModel):
 # 공통 모델
 class UserModelBase(SQLModel):
     # 파일 경로 저장할 필드
-    file_path: str
+    file_path: str = Field(sa_column=Column(Text))
     alias: str
 
 # DB 정의

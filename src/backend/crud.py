@@ -55,12 +55,10 @@ def delete_generation(db: Session, generation_id: int):
 ##################################################
 # C
 def create_user_model(db: Session, user_model: models.UserModelCreate):
-    """새로운 사용자 모델(파일 경로)을 DB에 저장합니다."""
+    """새로운 사용자 모델 이미지를 DB에 저장합니다."""
     db_model = models.UserModel.from_orm(user_model)
     db.add(db_model)
-    print(f"✅ [CRUD] 2. DB에 모델 추가 완료. 커밋 직전...")
     db.commit()
-    print(f"✅ [CRUD] 3. DB 커밋 성공!")
     db.refresh(db_model)
     return db_model
 
@@ -99,13 +97,8 @@ def delete_user_model(db: Session, model_id: int):
     if not model_to_delete:
         return None
     
-    file_path = model_to_delete.file_path
-    
     db.delete(model_to_delete)
     db.commit()
-    
-    if os.path.exists(file_path):
-        os.remove(file_path)
         
     return True
 
