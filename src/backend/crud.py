@@ -1,6 +1,7 @@
+# src/backend/crud.py
 import os
 from sqlmodel import Session, select
-from . import models
+from . import models, auth_utils
 
 
 ##################################################
@@ -103,26 +104,53 @@ def delete_user_model(db: Session, model_id: int):
     return True
 
 
+##################################################
+# 사용자 계정 관리
+##################################################
+# C
+def create_user(db: Session, user: models.UserCreate):
+    """새로운 사용자를 생성합니다."""
+    hashed_password = auth_utils.Hasher.get_password_hash(user.password)
+    db_user = models.User(username=user.username, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+# R
+def get_user_by_id(db: Session, user_id: int):
+    """ID로 특정 사용자를 조회합니다."""
+    return db.get(models.User, user_id)
+
+def get_user_by_username(db: Session, username: str):
+    """사용자 이름으로 특정 사용자를 조회합니다."""
+    statement = select(models.User).where(models.User.username == username)
+    return db.exec(statement).first()
+
+def get_all_users(db: Session):
+    """모든 사용자 목록을 조회합니다."""
+    return db.exec(select(models.User)).all()
+
+# U
+def update_user_password(db: Session, user_id: int, new_password: str):
+    """ID로 사용자를 찾아 새 비밀번호로 변경합니다."""
+    db_user = db.get(models.User, user_id)
+    if db_user:
+        db_user.hashed_password = auth_utils.Hasher.get_password_hash(new_password)
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+# D
+def delete_user(db: Session, user_id: int):
+    """ID로 특정 사용자를 삭제합니다."""
+    user_to_delete = db.get(models.User, user_id)
+    if not user_to_delete:
+        return None
+    db.delete(user_to_delete)
+    db.commit()
+    return True
 
 
 
-# ##################################################
-# # 회원가입 기능 추가 시
-# # 사용자 이름으로 DB에서 사용자 정보 조회
-# def get_user_by_username(db: Session, username: str):
-#     statement = select(models.User).where(models.User.username == username)
-#     user = db.exec(statement).first()
-#     return user
-
-# # 새로운 사용자 정보를 DB에 생성
-# def create_user(db: Session, user: models.UserCreate):
-#     # 입력받은 비밀번호를 해시값으로 변환
-#     hashed_password = hashing.Hasher.get_password_hash(user.password)
-    
-#     # DB에 저장할 User 객체 생성
-#     db_user = models.User(username=user.username, hashed_password=hashed_password)
-    
-#     db.add(db_user)
-#     db.commit()
-#     db.refresh(db_user) # DB에 저장된 최신 정보로 객체를 새로고침
-#     return db_user

@@ -1,3 +1,4 @@
+# src/backend/routers/generation.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from typing import List
@@ -6,11 +7,15 @@ from ..database import get_session
 
 
 ##################################################
-# 사용자 생성 결과물을 관리하는 API
-##################################################
 # 설정
+##################################################
+# 라우터
 router = APIRouter(prefix="/generations", tags=["Generations"])
 
+
+##################################################
+# 사용자 생성 결과물을 관리하는 API
+##################################################
 # C
 @router.post("/", response_model=models.GenerationResponse)
 def create_new_generation(generation: models.GenerationCreate, db: Session = Depends(get_session)):
