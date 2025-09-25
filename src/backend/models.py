@@ -13,6 +13,7 @@ class GenerationBase(SQLModel):
     input_text: Optional[str] = Field(default=None)
     output_text: Optional[str] = Field(default=None, sa_column=Column(Text))
     output_image_path: Optional[str] = Field(default=None)
+    owner_id: Optional[int] = Field(default=None, foreign_key="user.id") # 🟡 수정 중
 
 # DB 정의
 class Generation(GenerationBase, table=True):
@@ -37,6 +38,7 @@ class UserModelBase(SQLModel):
     # 파일 경로 저장할 필드
     file_path: str = Field(sa_column=Column(Text))
     alias: str
+    owner_id: Optional[int] = Field(default=None, foreign_key="user.id") # 🟡 수정 중
 
 # DB 정의
 class UserModel(UserModelBase, table=True):
