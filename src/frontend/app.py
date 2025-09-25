@@ -1,19 +1,3 @@
-"""
-- 채널: 인스타그램 / 블로그 (택1)
-- 출력: 텍스트 / 이미지 (둘 다 지원)
-- 입력: 텍스트 or 텍스트&이미지 → 선택 프롬프트 / 텍스트 프롬프트 택 1 필수
-    - A) 이미지 업로드
-    - B) 선택 프롬프트
-        - 홍보물 분류(상품: 음식/의류/화장품/가전, 서비스: 헬스장/미용실/음식점)
-        - 주변의 물체 /장소 / 이미지 분위기
-        - 문구 톤: 친근 / 반말 / 정중
-    - C) 텍스트 프롬프트
-        - 자유 형식의 요청사항 작성 (예시 문구 제공)
-- 개발 목표
-    - 사용자(소상공인) 연령을 고려하여 작동 하기 편리한 설계
-    - 메인 화면에 작동 방법, 각 기능마다 사용 방법 제시
-"""
-
 from pathlib import Path
 import streamlit as st
 
@@ -34,9 +18,9 @@ def render_sidebar_status():
     사이드바에 로그인 상태와 로그아웃 버튼 표시
     """
     with st.sidebar:
-        if "token" in st.session_state:
+        if "access_token" in st.session_state:
             if st.button("Logout", type="primary"):
-                st.session_state.pop("token", None)  # 안전하게 삭제
+                st.session_state.pop("access_token", None)  # 안전하게 삭제
                 st.rerun()  # 상태 갱신 → 로그인 페이지로 이동
 
 # 페이지 정의
@@ -50,7 +34,7 @@ def build_pages() -> dict:
     """
     base = Path(__file__).parent  # app.py 기준 상대 경로 안전화
     p = base / "pages"
-    is_logged_in = bool(st.session_state.get("token"))
+    is_logged_in = bool(st.session_state.get("access_token"))
 
     if not is_logged_in:
         # 로그인 전: 로그인 페이지만 보여주기

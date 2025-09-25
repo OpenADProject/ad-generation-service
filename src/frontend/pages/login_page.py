@@ -1,10 +1,6 @@
 import streamlit as st
 from utils.generations_api import login_user
 
-
-
-
-
 # 로그인 화면
 def login_page():
     st.title(":blue[Login]")
@@ -23,11 +19,10 @@ def login_page():
             if token:
                 st.success("로그인에 성공했습니다!")
                 # 로그인 성공 시 session_state에 토큰 저장
-                st.session_state['token'] = token
+                st.session_state['access_token'] = token
                 st.rerun()
             else:
                 st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
-
 
 if __name__ == "__main__":
     login_page()

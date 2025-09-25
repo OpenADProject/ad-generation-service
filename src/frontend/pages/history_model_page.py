@@ -19,6 +19,14 @@ PRESET_PEOPLE_IDS = {3, 4, 5, 6}
 PRESET_IDS = PRESET_ANIMAL_IDS | PRESET_PEOPLE_IDS
 
 
+# 로그인 요구
+def require_login() -> None:
+    """로그인 토큰 없으면 작업 중단"""
+    token = st.session_state.get("access_token")
+    if not token:
+        st.warning("로그인이 필요합니다. 먼저 로그인 해주세요.")
+        st.stop()
+
 # base64 디코딩
 def _decode_base64_to_bytes(s: str) -> bytes:
     if s.startswith("data:"):
@@ -43,27 +51,33 @@ def _render_card(item: Dict[str, Any]) -> None:
     alias = item.get("alias", "?")
     st.subheader(alias)
 
-    raw = item.get("file_path", "") or ""
+    raw = (item.get("file_path") or "").strip()
     try:
-        img_bytes = _decode_base64_to_bytes(raw)
-        st.image(img_bytes, use_container_width=True)
+        # URL이면 그대로 표시, 아니면 base64로 가정
+        if raw.startswith("http://") or raw.startswith("https://"):
+            st.image(raw, use_container_width=True)
+        else:
+            img_bytes = _decode_base64_to_bytes(raw)
+            st.image(img_bytes, use_container_width=True)
     except Exception as e:
         st.caption(f"이미지 표시 실패: {e}")
 
 
-def render_tab(api_base: str, items: List[Dict[str, Any]]) -> None:
+def render_tab(title: str, items: List[Dict[str, Any]]) -> None:
     if not items:
         st.info(f"{title}이(가) 없습니다.")
         return
+
     cols = st.columns(2)
     for i, it in enumerate(items):
         with cols[i % 2], st.container(border=True):
             _render_card(it)
 
-            # 내 모델 탭인 경우만 수정/삭제 노출
+            # 내 모델에서만 수정/삭제 노출 (프리셋 제외)
             if it.get("id") not in PRESET_IDS:
                 mid = it.get("id")
                 alias = it.get("alias", "")
+
                 with st.expander("모델명 변경"):
                     new_alias = st.text_input("새 별칭", value=alias, key=f"rename_{mid}")
                     if st.button("변경", key=f"btn_rename_{mid}", type="primary"):
@@ -103,7 +117,10 @@ def render_uploader() -> None:
                 st.error(f"업로드 실패: {e}")
 
 
+# 페이지 엔트리
 def render_history_model_page() -> None:
+    require_login()  # 로그인별로 목록/업로드 가능
+
     st.header("모델 목록", divider="blue")
 
     try:
@@ -112,16 +129,17 @@ def render_history_model_page() -> None:
         st.error(f"목록 조회 실패: {e}")
         items = []
 
+    # 업로드(내 모델에만 영향) — 로그인 사용자별로 동작
     render_uploader()
 
     animals, people, mine = split_items(items)
     tab1, tab2, tab3 = st.tabs(["동물", "사람", "내 모델"])
     with tab1:
-        render_tab(API_BASE, animals)
+        render_tab("동물 프리셋", animals)
     with tab2:
-        render_tab(API_BASE, people)
+        render_tab("사람 프리셋", people)
     with tab3:
-        render_tab(API_BASE, mine)
+        render_tab("내 모델", mine)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,8 @@
-import time
+import time, requests, base64, threading
 from io import BytesIO
 from typing import Optional, Tuple, List, Dict, Any
 import streamlit as st
 from PIL import Image
-import requests
-import base64
 
 from utils.generations_api import (
     save_generation,
@@ -12,9 +10,11 @@ from utils.generations_api import (
     delete_generation, 
     list_user_models,  
 ) 
+from utils.model_api import generate_insta_image
 from pages.history_model_page import _render_card
 
 PREVIEW_IMG_PATH = "assets/instagram_image.png"   # 상단 배너/미리보기     
+
 
 # 공통 유틸
 def _bytes_from_image(img: Image.Image) -> bytes:
@@ -35,6 +35,13 @@ def _decode_base64_to_bytes(s: str) -> bytes:
         s = s.split(",", 1)[-1]
     return base64.b64decode(s, validate=False)
 
+def _image_to_b64(img: Image.Image) -> str:
+    """PIL 이미지를 base64 문자열로 변환 (data: 접두사 없이 순수 base64)"""
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 # 보관함 세션 유틸 
 def _init_model_store():
     if "my_models" not in st.session_state:
@@ -51,7 +58,6 @@ def _add_to_model_store(uploaded_file) -> tuple[str, Image.Image, bool]:
     st.session_state["my_models"].append((name, img))
     st.session_state["uploaded_names"].add(name)
     return name, img, True
-
 
 def _get_all_models() -> List[Dict[str, Any]]:
     try:
@@ -76,6 +82,7 @@ def _render_models_grid_4col(items: List[Dict[str, Any]]) -> None:
                 st.image(img_bytes, use_container_width=True)
             except Exception as e:
                 st.caption(f"이미지 표시 실패: {e}")
+
 
 # 상단 인트로 영역
 def render_intro() -> None:
@@ -250,7 +257,7 @@ def main() -> None:
     if not submitted:
         return
 
-    # 요청 사항 미입력 시 멘트
+    # 필수값 체크
     if not uploaded_img:
         st.warning("상품이나 가게 이미지를 등록해주세요.")
         return
@@ -275,40 +282,66 @@ def main() -> None:
         st.warning("이미지 사이즈를 선택해주세요.")
         return
 
-    # 생성용 소스 이미지: 업로드 없으면 FALLBACK
-    src_img = uploaded_img 
+    # API 요청용 base64 준비
+    try:
+        product_b64 = _image_to_b64(uploaded_img)
+        model_b64 = _image_to_b64(selected_model_img) if selected_model_img is not None else None
+    except Exception as e:
+        st.error(f"이미지 인코딩 실패: {e}")
+        return
 
+    target_str = f"{gender_choice}/{age_choice}"
+
+    # 진행 표시: spinner (API 끝날 때까지 표시)
     placeholder = st.empty()
-    simulate_progress(placeholder)
+    with placeholder, st.spinner("매력적인 이미지를 생성 중이에요 ⌛"):
+        image_bytes, meta = generate_insta_image(
+            product_image=product_b64,
+            model_image=model_b64,  # None이면 키 빠짐
+            prompt=(prompt_text or "").strip(),
+            brand_name=title,
+            background=bg_choice,
+            target=target_str,
+            size=size_choice,
+            model_alias=(selected_model_alias or ""),
+            file_saved=False,
+            timeout=600,  
+        )
 
+    # 결과 처리
+    if image_bytes is None:
+        # 서버가 images에만 담아 주는 등 특이 응답일 수 있으니 meta도 보여주기
+        raise ValueError(f"이미지 생성 응답에 base64가 없습니다. meta={meta}")
+
+    generated_img = Image.open(BytesIO(image_bytes))
     placeholder.empty()
     with placeholder.container():
-        render_result(src_img, download_name=title)
+        render_result(generated_img, download_name=title)
 
+        # 이력 저장
         input_text = (
             f"[채널: instagram]\n"
             f"상품/상호명: {title}\n"
             f"배경: {bg_choice}\n"
-            f"마케팅 대상: {gender_choice}/{age_choice}\n"
+            f"마케팅 대상: {target_str}\n"
             f"이미지 크기: {size_choice}\n"
-            f"모델: {selected_model_alias}\n"
+            f"모델: {selected_model_alias or '선택 안 함'}\n"
             f"요청사항: {prompt_text or 'None'}"
         )
+        input_image_path = _data_url_from_image(uploaded_img) if uploaded_img is not None else None
+        output_image_path = _data_url_from_image(generated_img)
+
         try:
-            # 입력 이미지가 있다면 input_image_path도 함께 저장 (base64)
-            input_image_path = _data_url_from_image(uploaded_img) if uploaded_img is not None else None
-            data_url = _data_url_from_image(src_img)
             saved = save_generation(
                 input_text=input_text,
                 input_image_path=input_image_path,
-                output_image_path=data_url
+                output_image_path=output_image_path,
             )
             st.info(f"생성 이력이 저장되었습니다 · ID: {saved.get('id','?')}")
         except requests.HTTPError as e:
             st.error(f"이력 저장 실패(HTTP): {e.response.status_code} {e.response.text}")
         except Exception as e:
             st.error(f"이력 저장 실패: {e}")
-
 
 if __name__ == "__main__":
     main()
