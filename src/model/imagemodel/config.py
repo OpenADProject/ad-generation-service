@@ -1,71 +1,46 @@
-# imagemodel/config.py
+import torch
 import os
-from dataclasses import dataclass
-from typing import Optional
 
-# .env는 있으면 로드(없어도 무시)
-try:
-    from dotenv import load_dotenv  
-    load_dotenv()
-except Exception:
-    pass
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+TORCH_DTYPE = torch.float16 if torch.cuda.is_available() else torch.float32
 
 
-@dataclass
-class GenConfig:
-    api_provider: str            # "hf" | "local"
-    hf_token: Optional[str]
-    hf_model: Optional[str]
-    hf_provider: str             # "fal-ai" 등 (옵션)
-    sd3_model_path: Optional[str]
-    low_mem: bool
-    cpu_offload: bool
-    model_family: str = "sd3.5"
-    model_variant: str = "medium"
+BASE_MODEL_DIR = "/opt/models/hf/hub"
 
+SDXL_BASE_MODEL_PATH = os.path.join(BASE_MODEL_DIR, "stabilityai--stable-diffusion-xl-base-1.0")
+VAE_PATH = os.path.join(BASE_MODEL_DIR, "madebyollin--sdxl-vae-fp16-fix")
 
-def load_config(
-    api_provider: Optional[str] = None,
-    hf_token: Optional[str] = None,
-    hf_model: Optional[str] = None,
-    hf_provider: Optional[str] = None,
-    sd3_model_path: Optional[str] = None,
-    low_mem: Optional[bool] = None,
-    cpu_offload: Optional[bool] = None,
-    # 새 인자
-    model_family: Optional[str] = None,
-    model_variant: Optional[str] = None,
-) -> GenConfig:
-    # 1) .env/환경변수 기본값
-    env_api_provider = os.getenv("ADSGEN_API_PROVIDER", "local").strip().lower()
-    env_hf_token     = os.getenv("HF_API_TOKEN") or os.getenv("HF_TOKEN")
-    env_hf_model     = os.getenv("ADSGEN_HF_TXT2IMG_MODEL")
-    env_hf_provider  = os.getenv("ADSGEN_HF_PROVIDER", "fal-ai")
-    env_sd3_path     = os.getenv("ADSGEN_SD3_MODEL", "/opt/models/hf/sd3.5-medium")
-    env_low_mem      = os.getenv("ADSGEN_LOW_MEM", "0") == "1"
-    env_offload      = os.getenv("ADSGEN_CPU_OFFLOAD", "0") == "1"
-    env_family       = os.getenv("ADSGEN_MODEL_FAMILY", "sd3.5").strip().lower()
-    env_variant      = os.getenv("ADSGEN_MODEL_VARIANT", "medium").strip().lower()
+CONTROLNET_CANNY_PATH = os.path.join(BASE_MODEL_DIR, "diffusers--controlnet-canny-sdxl-1.0")
+CONTROLNET_DEPTH_PATH = os.path.join(BASE_MODEL_DIR, "diffusers--controlnet-depth-sdxl-1.0")
+CONTROLNET_INPAINT_PATH = os.path.join(BASE_MODEL_DIR, "destitech--controlnet-inpaint-dreamer-sdxl")
 
-    # 2) CLI 인자가 있으면 최우선으로 덮어쓰기
-    api_provider   = (api_provider or env_api_provider).strip().lower()
-    hf_token       = hf_token or env_hf_token
-    hf_model       = hf_model or env_hf_model
-    hf_provider    = (hf_provider or env_hf_provider).strip()
-    sd3_model_path = sd3_model_path or env_sd3_path
-    low_mem        = env_low_mem if low_mem is None else low_mem
-    cpu_offload    = env_offload if cpu_offload is None else cpu_offload
-    model_family   = (model_family or env_family).strip().lower()
-    model_variant  = (model_variant or env_variant).strip().lower()
+IP_ADAPTER_BASE_PATH = os.path.join(BASE_MODEL_DIR, "models--h94--IP-Adapter")
+IP_ADAPTER_IMAGE_ENCODER_PATH = "/opt/models/hf/hub/laion--CLIP-ViT-H-14-laion2B-s32B-b79K"
+IP_ADAPTER_WEIGHTS_PATH = os.path.join(IP_ADAPTER_BASE_PATH, "sdxl_models", "ip-adapter-plus_sdxl_vit-h.safetensors")
 
-    return GenConfig(
-        api_provider=api_provider,
-        hf_token=hf_token,
-        hf_model=hf_model,
-        hf_provider=hf_provider,
-        sd3_model_path=sd3_model_path,
-        low_mem=low_mem,
-        cpu_offload=cpu_offload,
-        model_family=model_family,
-        model_variant=model_variant,
-    )
+GROUNDING_DINO_PATH = os.path.join(BASE_MODEL_DIR, "IDEA-Research--grounding-dino-tiny")
+
+SAM_MODEL_PATH = os.path.join(BASE_MODEL_DIR, "facebook--sam-vit-huge")
+
+REFINER_MODEL_PATH = os.path.join(BASE_MODEL_DIR, "stabilityai--stable-diffusion-xl-refiner-1.0")
+REFINER_STRENGTH = 0.1 
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
+GPT_MODEL = "gpt-5-mini"
+
+ENABLE_GPT_ANALYSIS = True
+
+ENABLE_AD_WRAPPER = True  # 광고용 래핑 기능 on/off
+AD_BRAND_NAME = None      # 예: "Sunny Pets"
+AD_PRODUCT_NAME = None    # 예: "Banana Chew Toy"
+AD_TONE = "bold, clean, modern, high-contrast"
+AD_LAYOUT_HINT = "hero shot composition with generous negative space for copy at top-right"
+AD_CTA = "Shop now"       # 한국어 프롬프트면 자동 번역 CTA 사용
+AD_STYLE_HINTS = [
+    "studio-grade lighting",
+    "clear subject-background separation",
+    "subtle depth of field",
+    "high legibility background",
+]
+AD_STRENGTH = 0.8  # 0~1. 1에 가까울수록 광고 템플릿 가중치가 큼
+MAX_PROMPT_CHARS = 900  # 너무 길어지면 잘라내는 상한
