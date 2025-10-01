@@ -57,7 +57,7 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     connectable = engine
 
-    # 🟡 작명 규칙(naming_convention)을 정의하는 딕셔너리
+    # 작명 규칙(naming_convention)을 정의하는 딕셔너리
     naming_convention = {
         "ix": "ix_%(column_0_label)s",
         "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -71,7 +71,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
-            naming_convention=naming_convention # 👈 이 줄을 추가!
+            naming_convention=naming_convention
         )
 
         with context.begin_transaction() as transaction:
