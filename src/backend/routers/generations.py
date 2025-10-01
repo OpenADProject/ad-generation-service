@@ -46,7 +46,7 @@ def read_all_generations(
     """
     현재 로그인된 사용자의 모든 생성 이력 목록을 조회함.
     """
-    generations = crud.get_generations_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+    generations = crud.get_generations(db, user_id=current_user.id, skip=skip, limit=limit)
     return generations
 
 # D
