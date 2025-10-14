@@ -4,25 +4,25 @@ from typing import Dict, Any, Optional, Tuple
 
 MODEL_API_BASE = st.secrets["MODEL_API_BASE"].rstrip("/")
 
-def generate_insta_text(
+def generate_text(
     product: str,
     tone: str,
     target_audience: str,
     translate_en: bool,
+    location: str, 
     channel: str = "instagram",
     timeout: int = 30,
 ) -> str:
     """
-    인스타그램 텍스트 생성 API 호출 함수
-    Args:
-        product (str): 상품/상호명
-        tone (str): 말투 톤
-        target_audience (str): 타겟층
-        translate_en (bool): 영어 번역 포함 여부
-        channel (str): 기본 instagram
+    텍스트 생성 API 호출
+
+    - POST {MODEL_API_BASE}/infer/text
+    - 입력: 상품/상호명, 톤, 타겟층, 지역, 영어 번역 여부, 채널
+    - 성공: 생성된 문구 문자열 반환
+    - 실패: HTTPError 또는 ValueError 발생
 
     Returns:
-        생성된 텍스트(str)
+        str: 생성된 텍스트(양 끝 공백 제거)
     """
     url = f"{MODEL_API_BASE}/infer/text"
     payload = {
@@ -31,6 +31,7 @@ def generate_insta_text(
         "channel": channel,
         "target_audience": target_audience,
         "translate_en": translate_en,
+        "location" : location
     }
 
     resp = requests.post(url, json=payload, timeout=timeout)
@@ -55,6 +56,25 @@ def generate_insta_image(
     file_saved: bool = False,
     timeout: int = 60,
 ) -> Tuple[Optional[bytes], Dict[str, Any]]:
+    """
+    인스타그램 이미지 생성 API 호출
+
+    - POST {MODEL_API_BASE}/infer/image
+    - 입력:
+        product_image (base64, data URL 가능),
+        model_image (선택, base64/data URL),
+        prompt(자유 요청),
+        params: brand_name/background/target/size/model_alias/file_saved
+    - 응답 파싱:
+        이미지 base64는 다양한 키를 탐색하여 추출
+        (output_base64/image_base64/image/output_image/data/images)
+    - 디코딩 실패 시 ValueError 발생
+
+    Returns:
+        Tuple[Optional[bytes], Dict[str, Any]]:
+            image_bytes: 생성된 PNG 바이너리 (없으면 None)
+            meta: 이미지 원본 키들을 제외한 나머지 메타 정보
+    """
     url = f"{MODEL_API_BASE}/infer/image"
 
     # model_image가 없으면 키 자체를 빼주는 게 안전

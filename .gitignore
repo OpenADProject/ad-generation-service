@@ -225,3 +225,8 @@ __pycache__/
 .gitconfig
 .sudo_as_admin_successful
 .wget-hsts
+
+# frontend
+src/frontend/assets
+src/frontend/.streamlit
+src/frontend/static

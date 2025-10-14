@@ -6,9 +6,22 @@ enableCORS = false
 enableXsrfProtection = false 
 runOnSave = true    # 저장 시 자동 새로고침
 
+
 [theme]
 backgroundColor = "rgba(248, 247, 252, 0.93)"
 primaryColor = "#069ff8b9"
-secondaryBackgroundColor="rgba(184, 226, 230, 1)"
+secondaryBackgroundColor="rgba(214, 237, 249, 0.72)"
 textColor = "#13052cf1"
 baseFontSize = 17
+
+
+
+baseRadius = "1rem"
+buttonRadius = "2rem"
+
+[ui]
+hideTopBar = true
+layout = "wide"
+
+[client]
+toolbarMode = "viewer"
