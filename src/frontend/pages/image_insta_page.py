@@ -18,39 +18,58 @@ PREVIEW_IMG_PATH = "assets/instagram_image.png"   # 상단 배너/미리보기
 
 # 공통 유틸
 def _bytes_from_image(img: Image.Image) -> bytes:
+    """
+    PIL 이미지를 PNG 바이트로 변환
+    """
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
     return buf.getvalue()
 
 def _data_url_from_image(img: Image.Image) -> str:
+    """
+    PIL 이미지를 data URL(base64, PNG)로 변환
+    """
     buf = BytesIO()
     img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{b64}"
 
 def _decode_base64_to_bytes(s: str) -> bytes:
+    """
+    base64 문자열 → 바이트
+    - data: 접두사 포함 가능
+    """
     # data URI면 접두사 제거
     if s.startswith("data:"):
         s = s.split(",", 1)[-1]
     return base64.b64decode(s, validate=False)
 
 def _image_to_b64(img: Image.Image) -> str:
-    """PIL 이미지를 base64 문자열로 변환 (data: 접두사 없이 순수 base64)"""
+    """
+    PIL 이미지를 base64 문자열로 변환 
+    """
     buf = BytesIO()
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
-
 # 보관함 세션 유틸 
 def _init_model_store():
+    """
+    세션 상태 초기화
+    - my_models: [(name, PIL.Image)]
+    - uploaded_names: 중복 업로드 방지용 set
+    """
     if "my_models" not in st.session_state:
         st.session_state["my_models"] = []          # [(name, PIL.Image)]
     if "uploaded_names" not in st.session_state:
         st.session_state["uploaded_names"] = set()  # 중복 방지용
 
 def _add_to_model_store(uploaded_file) -> tuple[str, Image.Image, bool]:
-    """업로드 파일을 보관함 세션에 저장. (name, img, added) 반환"""
+    """
+    업로드 이미지를 세션 보관함에 추가
+    Returns: (파일명, PIL.Image, 추가여부)
+    """
     name = uploaded_file.name
     img = Image.open(uploaded_file).copy()  # 파일 핸들 분리
     if name in st.session_state["uploaded_names"]:
@@ -60,6 +79,9 @@ def _add_to_model_store(uploaded_file) -> tuple[str, Image.Image, bool]:
     return name, img, True
 
 def _get_all_models() -> List[Dict[str, Any]]:
+    """
+    서버에서 모델 목록 조회 (예외 시 빈 리스트 반환)
+    """
     try:
         return list_user_models()  
     except Exception as e:
@@ -67,6 +89,10 @@ def _get_all_models() -> List[Dict[str, Any]]:
         return []
 
 def _render_models_grid_4col(items: List[Dict[str, Any]]) -> None:
+    """
+    모델 미리보기 4열 그리드 렌더링
+    - base64 이미지 표시, 실패 시 캡션 노출
+    """
     if not items:
         st.info("등록된 모델이 없습니다.")
         return
@@ -86,21 +112,65 @@ def _render_models_grid_4col(items: List[Dict[str, Any]]) -> None:
 
 # 상단 인트로 영역
 def render_intro() -> None:
+    """
+    상단 배너 및 간단 안내 문구 렌더링
+    """
     st.image(PREVIEW_IMG_PATH)
+    st.markdown(
+        """
+        <style>
+        .centered-text {
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        """
+        <p style='font-size:18px; text-align:center;'>
+        상품/가게 이미지를 업로드한 뒤, 상품명, 배경, 대상, 사이즈, 모델, 추가 요청사항을 입력해주세요.
+        <br><b>모두 입력이 끝나면</b> 맨 아래의 <span style="background-color:#c79dd7; color:white; padding:2px 6px; border-radius:30px;">이미지 생성하기</span> 버튼을 눌러주세요.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.write(" ")
-    st.markdown("인스타그램 홍보 이미지를 손쉽게 만들어보세요! ✨")
-    st.markdown("상품/가게 이미지를 업로드한 뒤, 상품명, 배경, 타겟층, 사이즈, 모델, 추가 요청사항을 입력해주세요.")
-    st.markdown("**모두 입력이 끝나면** 맨 아래의 :rainbow-background[이미지 생성하기] 버튼을 눌러주세요.")
     st.write(" ")
-    st.write(" ")
+
+def render_guide(
+    label: str = "**이미지 생성 가이드**",
+    page: str = "./pages/image_main_page.py",
+):
+    """
+    가이드 이동 버튼 렌더링
+    - 클릭 시 지정 페이지로 이동
+    """
+    """두 개의 버튼을 같은 행에 출력하고, 눌리면 해당 페이지로 이동합니다."""
+    if st.button(label, type="primary"):
+        st.switch_page(page)
+    st.caption("💡 처음이라면 가이드를 확인하고 진행해 보세요!")
 
 # 입력 폼
 def build_form() -> Tuple[
     bool, Optional[Image.Image], str, str, str, str, str, Optional[int], str
 ]:
     """
-    Returns:
-        submitted, uploaded_img, title, bg_choice, gender_choice, age_choice, size_choice, selected_model_alias, selected_model_img, prompt_text
+    인스타 이미지 생성 입력 폼
+    - 업로드 이미지, 배경/타깃/사이즈, 모델 선택, 자유 프롬프트 수집
+
+    Returns (총 10개):
+        submitted: bool
+        uploaded_img: Optional[PIL.Image]
+        title: str
+        bg_choice: str
+        gender_choice: str
+        age_choice: str
+        size_choice: str
+        selected_model_alias: Optional[str]
+        selected_model_img: Optional[PIL.Image]
+        prompt_text: str
     """
     _init_model_store()  # 보관함 세션키 보장
 
@@ -110,7 +180,7 @@ def build_form() -> Tuple[
         
         st.write("등록된 이미지를 기반으로 원하는 스타일로 생성해 드려요 ✨")
         uploaded_file = st.file_uploader(
-            "⬇️ :orange-background[Browse files] 버튼을 눌러 상품/가게 이미지를 등록해주세요. (필수)",
+            ":orange-background[Browse files] 버튼을 눌러 상품/가게 이미지를 등록해주세요.",
             type=["png", "jpg", "jpeg"],
             key="main_image_uploader",   # ← 고유 key
         )
@@ -223,20 +293,16 @@ def build_form() -> Tuple[
         )
 
         st.write(" ")
-        submitted = st.form_submit_button("이미지 생성하기", type="primary")
+        submitted = st.form_submit_button("이미지 생성하기", type="primary", width="stretch")
 
     # 모델 업로드 파일과 별칭도 함께 반환
     return submitted, uploaded_img, title, bg_choice, gender_choice, age_choice, size_choice, selected_model_alias, selected_model_img, prompt_text
 
-# 진행/결과 표시 
-def simulate_progress(placeholder: st.delta_generator.DeltaGenerator) -> None:
-    placeholder.progress(0, "매력적인 이미지를 생성 중이에요 ⌛")
-    time.sleep(0.6)
-    placeholder.progress(50, "매력적인 이미지를 생성 중이에요 ⌛")
-    time.sleep(0.6)
-    placeholder.progress(100, "완료!")
-
+# 이미지 생성 완료 
 def render_result(generated_img: Image.Image, download_name: str) -> None:
+    """
+    생성 결과 이미지 표시 및 다운로드 버튼 제공
+    """
     st.success("이미지가 생성되었습니다! 🎉 ")
     st.image(generated_img, caption="생성 결과", use_container_width=True)
     st.download_button(
@@ -244,12 +310,19 @@ def render_result(generated_img: Image.Image, download_name: str) -> None:
         data=_bytes_from_image(generated_img),
         file_name=f"{download_name or 'generated'}_image.png",
         mime="image/png",
-        use_container_width=True,
+        type="primary", 
+        width="stretch"
     )
 
 # 엔트리 포인트 
 def main() -> None:
+    """
+    페이지 엔트리 포인트
+    - 인트로/가이드 → 폼 입력 수집 → 검증 → 이미지 생성 호출
+    - 결과 표시 및 생성 이력 저장
+    """
     render_intro()
+    render_guide()
 
     # 폼 입력 수집 
     submitted, uploaded_img, title, bg_choice, gender_choice, age_choice, size_choice, selected_model_alias, selected_model_img, prompt_text = build_form()

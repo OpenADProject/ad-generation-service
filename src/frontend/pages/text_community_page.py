@@ -7,12 +7,12 @@ from utils.generations_api import save_generation, list_generations, delete_gene
 from utils.model_api import generate_text
 from st_copy import copy_button
 
-BANNER_IMG_PATH   = "assets/instagram_text.png"
+BANNER_IMG_PATH   = "assets/community_text.png"
 
 def ensure_session() -> None:
     """
     세션 상태 초기화
-    - insta_text_result 키가 없을 경우 기본값 설정
+    - insta_text_result 키가 없을 경우 기본값 생성
     """
     if "insta_text_result" not in st.session_state:
         st.session_state.insta_text_result = None
@@ -23,7 +23,7 @@ def load_locations_json(path: str = "assets/regions_filtered.json") -> dict:
     """
     지역 선택용 JSON 파일 로드 및 트리 형태로 변환
     - 원본(list 스키마) → {시/도: {시/군/구: [읍/면/동]}} 구조
-    - dict 형태면 그대로 반환 
+    - dict 형태면 그대로 반환
     - 캐시 적용으로 반복 호출 최적화
     """
     p = Path(path)
@@ -80,10 +80,9 @@ def reset_cascade_state(level_key: str, *child_keys: str) -> None:
 
 def render_intro() -> None:
     """
-    상단 배너 및 인스타 텍스트 생성 가이드 출력
+    상단 배너 및 인스타 텍스트 생성 가이드 표시
     """
     st.image(BANNER_IMG_PATH)
-
     st.markdown(
         """
         <style>
@@ -103,7 +102,6 @@ def render_intro() -> None:
         """,
         unsafe_allow_html=True
     )
-
     st.write(" ")
     st.write(" ")
 
@@ -112,26 +110,26 @@ def render_guide(
     page: str = "./pages/text_main_page.py",
 ):
     """
-    가이드 이동 버튼 렌더링
-    - 클릭 시 가이드 페이지로 이동
+    가이드 버튼 렌더링
+    - 클릭 시 안내 페이지로 이동
     """
     if st.button(label, type="primary"):
         st.switch_page(page)
     st.caption("💡 처음이라면 가이드를 확인하고 진행해 보세요!")
-
+    
 # 입력 폼
 def build_form() -> Tuple[bool, str, str, str, bool, str]:
     """
     인스타그램 텍스트 생성 폼 렌더링
-    - 상호명/상품명, 톤, 타겟, 번역 여부, 지역 선택 수집
-    - 지역은 캐스케이딩 selectbox로 선택 가능
+    - 상호명/상품명, 톤, 타겟, 영어 번역 옵션, 지역 수집
+    - 캐스케이딩 지역 선택 지원
 
     Returns:
         submitted (bool): 제출 여부
-        title (str): 상호/상품명
+        title (str): 상품/상호명
         tone (str): 말투 톤
-        target (str): 타겟층
-        english_translation (bool): 영어 번역 여부
+        target (str): 마케팅 타겟층
+        english_translation (bool): 영어 번역 포함 여부
         location (str): 지역명
     """
     with st.container(border=True):
@@ -212,8 +210,9 @@ def build_form() -> Tuple[bool, str, str, str, bool, str]:
 # 텍스트 생성 결과
 def render_result(text: str) -> None:
     """
-    생성된 텍스트 결과 표시
-    - 복사 버튼 및 텍스트 다운로드 기능 제공
+    텍스트 생성 결과 표시
+    - 결과 텍스트 출력 및 복사 버튼
+    - 다운로드 버튼 제공
     """
     st.success("텍스트가 생성되었습니다! 🎉")
     with st.container(border=True):
@@ -239,13 +238,14 @@ def main() -> None:
     """
     인스타그램 텍스트 생성 페이지 엔트리 포인트
     - 세션 초기화 및 인트로 렌더링
-    - 폼 입력 수집
-    - 제출 시 광고 문구 생성 요청
-    - 결과 출력 및 생성 이력 저장
+    - 입력 폼 렌더링
+    - 제출 시 텍스트 생성 및 결과 표시
+    - 생성 이력 저장
     """
     ensure_session()
     render_intro()
     render_guide()
+
     submitted, title, tone, target, english_translation, location = build_form()
 
     st.divider()
