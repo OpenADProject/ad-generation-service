@@ -70,11 +70,11 @@
     ```
 
 4. **환경 변수 (.env)**
-환경 변수는 각 서버 루트에 존재합니다.
-```bash
-OPENAI_API_KEY=YourOpenAIKey
-HF_TOKEN=YourHuggingfaceKey
-```
+    환경 변수는 각 서버 루트에 존재합니다.
+    ```bash
+    OPENAI_API_KEY=YourOpenAIKey
+    HF_TOKEN=YourHuggingfaceKey
+    ```
 
 ### 2. 서버 실행
 각 서버는 **별도의 터미널 창**을 열어서 실행해야 합니다.
