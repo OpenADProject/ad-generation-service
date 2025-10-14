@@ -1,9 +1,9 @@
-# serve_ready.py
 # ------------------------------------
-# 1. 프론트 → 서빙: JSON 통일
-# 2. 서빙 → 모델 호출: 텍스트API / 이미지API (병렬 호출)
-# 3. 서빙 → 백엔드: 생성 결과 기록 (비동기)
-# 4. 프론트에는 API 응답 그대로 전달
+# 특징 : - 프론트 → 서빙: JSON 요청
+#        - 서빙 → 텍스트 API / 이미지 API 병렬 호출
+#        - 결과 기록 비동기 처리
+#        - 프론트에 API 응답 전달
+# 수정 : 텍스트API location 추가 수정
 # ------------------------------------
 
 import json
@@ -28,16 +28,18 @@ import base64
 dotenv_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path)
 
+# 주요 API 엔드포인트 URL
 TEXT_API_URL = os.getenv("TEXT_API_URL", "http://34.123.118.58:8080/generate")
 IMAGE_API_URL_JSON = os.getenv("IMAGE_API_URL_JSON", "http://34.123.118.58:8090/generate_image")
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:9000/generations/")
 BACKEND_API_TOKEN = os.getenv("BACKEND_API_TOKEN", "")
 
+# 동시 처리 제한
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", 10))
 semaphore = Semaphore(MAX_CONCURRENT)
 
 # ===============================
-# 로그 경로 설정
+# 로그 설정
 # ===============================
 LOG_DIR = Path(__file__).resolve().parent / "log"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,8 +48,8 @@ log_file = LOG_DIR / "serve_ready.log"
 
 handler = RotatingFileHandler(
     filename=log_file,
-    maxBytes=10 * 1024 * 1024,
-    backupCount=5,
+    maxBytes=10 * 1024 * 1024,  # 로그 파일 최대 크기: 10MB
+    backupCount=5,              # 로그 백업 파일 개수
     encoding="utf-8"
 )
 formatter = logging.Formatter("%(asctime)s - [%(levelname)s] - %(message)s")
@@ -67,14 +69,18 @@ app = FastAPI(title="AdGen Serving API", version="2.7")
 # ===============================
 # 유틸 함수
 # ===============================
+
 def validate_base64(b64_str: str) -> bool:
+    """
+    base64 문자열이 올바른 형식인지 검증
+    """
     pattern = re.compile(r"^[A-Za-z0-9+/=\n\r]+$")
     return bool(b64_str) and bool(pattern.match(b64_str))
 
 
 def clean_base64(b64_str: str) -> str:
     """
-    base64 문자열에서 header(data:image/png;base64,) 제거
+    base64 문자열에서 header 제거 (data:image/png;base64,)
     """
     if not b64_str:
         return ""
@@ -84,6 +90,9 @@ def clean_base64(b64_str: str) -> str:
 
 
 async def call_api_with_retry(url: str, payload: Dict[str, Any], timeout: int = 60, retries: int = 3) -> Dict[str, Any]:
+    """
+    API 호출을 재시도 로직 포함해서 실행
+    """
     for attempt in range(retries):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -101,14 +110,23 @@ async def call_api_with_retry(url: str, payload: Dict[str, Any], timeout: int = 
 
 
 async def call_text_api(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    텍스트 API 호출
+    """
     return await call_api_with_retry(TEXT_API_URL, payload, timeout=60)
 
 
 async def call_image_api(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    이미지 API 호출
+    """
     return await call_api_with_retry(IMAGE_API_URL_JSON, payload, timeout=300)
 
 
 async def save_generation_history(record: Dict[str, Any], owner_id: int) -> None:
+    """
+    백엔드에 생성 기록 저장 (비동기)
+    """
     try:
         record["owner_id"] = owner_id
         headers = {}
@@ -126,8 +144,12 @@ async def save_generation_history(record: Dict[str, Any], owner_id: int) -> None
 # ===============================
 # 엔드포인트
 # ===============================
+
 @app.post("/infer/text")
 async def infer_text(request: Request):
+    """
+    텍스트 생성 API
+    """
     async with semaphore:
         body = await request.json()
         owner_id = body.get("owner_id", 0)
@@ -149,6 +171,7 @@ async def infer_text(request: Request):
                 "input_image_path": "",
                 "output_text": output_text,
                 "output_image_path": "",
+                "channel": body.get("channel", "instagram"),
             }, owner_id)
         )
 
@@ -157,6 +180,9 @@ async def infer_text(request: Request):
 
 @app.post("/infer/image")
 async def infer_image(request: Request):
+    """
+    이미지 생성 API
+    """
     async with semaphore:
         body = await request.json()
         owner_id = body.get("owner_id", 0)
@@ -202,6 +228,9 @@ async def infer_image(request: Request):
 
 @app.post("/infer/all")
 async def infer_all(request: Request):
+    """
+    텍스트 + 이미지 병렬 생성 API
+    """
     async with semaphore:
         body = await request.json()
         owner_id = body.get("owner_id", 0)
@@ -212,7 +241,9 @@ async def infer_all(request: Request):
         if not (product_b64 or model_b64):
             raise HTTPException(status_code=400, detail="최소 한 개의 이미지(base64)가 필요합니다")
 
-        text_payload = {k: v for k, v in body.items() if k in ["product", "tone", "channel", "target_audience", "translate_en"]}
+        # location 필드 추가
+        text_payload = {k: v for k, v in body.items() if k in ["product", "tone", "channel", "target_audience", "translate_en", "location"]}
+
         image_payload = {
             "model_image": model_b64,
             "product_image": product_b64,
@@ -248,40 +279,56 @@ async def infer_all(request: Request):
             "success": True
         }
 
-
-# -----------------------------------
-# 헬스 체크
-# -----------------------------------
+# ===============================
+# 헬스체크 엔드포인트
+# ===============================
 @app.get("/health_check")
 async def health_check():
     result = {}
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(TEXT_API_URL, json={"prompt": "테스트", "params": {}, "product": "dummy"})
-            result["text_api"] = {"connected": res.status_code == 200, "status": res.status_code,
-                                  "error": None if res.status_code == 200 else res.text}
+            res = await client.post(TEXT_API_URL, json={
+                "prompt": "테스트",
+                "params": {},
+                "product": "dummy"
+            })
+            result["text_api"] = {
+                "connected": res.status_code == 200,
+                "status": res.status_code,
+                "error": None if res.status_code == 200 else res.text
+            }
     except Exception as e:
         result["text_api"] = {"connected": False, "status": None, "error": str(e)}
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             dummy_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAgMBgkK8VgAAAABJRU5ErkJggg=="
-            res = await client.post(IMAGE_API_URL_JSON,
-                                    json={"model_image": "", "product_image": dummy_b64, "prompt": "테스트", "params": {}})
-            result["image_api"] = {"connected": res.status_code == 200, "status": res.status_code,
-                                   "error": None if res.status_code == 200 else res.text}
+            res = await client.post(IMAGE_API_URL_JSON, json={
+                "model_image": "",
+                "product_image": dummy_b64,
+                "prompt": "테스트",
+                "params": {}
+            })
+            result["image_api"] = {
+                "connected": res.status_code == 200,
+                "status": res.status_code,
+                "error": None if res.status_code == 200 else res.text
+            }
     except Exception as e:
         result["image_api"] = {"connected": False, "status": None, "error": str(e)}
 
     return result
 
-
 @app.get("/test")
 def test():
+    """
+    서버 상태 확인
+    """
     return {"status": "server_ok"}
 
 # ===============================
 # 실행 예시
 # uvicorn src.serving.serve_advanced:app --host 0.0.0.0 --port 9001 --reload
 # ===============================
+
